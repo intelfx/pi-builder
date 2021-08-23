@@ -348,17 +348,22 @@ format: $(__DEP_TOOLBOX)
 		&& set -e \
 		&& parted $(CARD) -s mklabel msdos \
 		&& parted $(CARD) -a optimal -s mkpart primary fat32 $(if $(findstring generic,$(BOARD)),32MiB,0) 256MiB \
-		&& parted $(CARD) -a optimal -s mkpart primary ext4 256MiB $(if $(CARD_DATA_FS_TYPE),$(CARD_DATA_BEGIN_AT),100%) \
+		&& parted $(CARD) -a optimal -s mkpart primary btrfs 256MiB $(if $(CARD_DATA_FS_TYPE),$(CARD_DATA_BEGIN_AT),100%) \
 		&& $(if $(CARD_DATA_FS_TYPE),parted $(CARD) -a optimal -s mkpart primary $(CARD_DATA_FS_TYPE) $(CARD_DATA_BEGIN_AT) 100%,/bin/true) \
 		&& partprobe $(CARD) \
 	"
-	$(__DOCKER_RUN_TMP_PRIVILEGED) bash -c " \
+	$(__DOCKER_RUN_TMP_PRIVILEGED) bash -c ' \
 		set -x \
 		&& set -e \
 		&& yes | mkfs.vfat $(_CARD_BOOT) \
-		&& yes | mkfs.ext4 $(_CARD_ROOTFS) \
+		&& yes | mkfs.btrfs --force --data single --metadata dup --csum xxhash64 -O no-holes -R free-space-tree $(_CARD_ROOTFS) \
+		&& mountpoint=$$(mktemp -p $(_TMP_DIR) -d) \
+		&& mount $(_CARD_ROOTFS) $$mountpoint \
+		&& btrfs subvolume create $$mountpoint/arch \
+		&& btrfs subvolume set-default $$mountpoint/arch \
+		&& umount $$mountpoint \
 		&& $(if $(CARD_DATA_FS_TYPE),yes | mkfs.$(CARD_DATA_FS_TYPE) $(CARD_DATA_FS_FLAGS) $(_CARD_DATA),/bin/true) \
-	"
+	'
 	$(call say,"Format complete")
 
 
@@ -391,9 +396,10 @@ install: extract format install-uboot
 	$(__DOCKER_RUN_TMP_PRIVILEGED) bash -c " \
 		mkdir -p mnt/boot mnt/rootfs \
 		&& mount $(_CARD_BOOT) mnt/boot \
-		&& mount $(_CARD_ROOTFS) mnt/rootfs \
+		&& mount $(_CARD_ROOTFS) mnt/rootfs -o noatime,ssd,discard=async,compress=zstd:1 \
 		&& rsync -a --info=progress2 $(_RPI_RESULT_ROOTFS)/boot/* mnt/boot \
 		&& rsync -a --info=progress2 $(_RPI_RESULT_ROOTFS)/* mnt/rootfs --exclude boot \
+		&& echo "rootflags=noatime,ssd,discard=async,compress=zstd:1" >> mnt/boot/cmdline.txt \
 		&& mkdir mnt/rootfs/boot \
 		&& umount mnt/boot mnt/rootfs \
 	"
