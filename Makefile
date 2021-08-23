@@ -307,7 +307,7 @@ $(_QEMU_COLLECTION):
 
 # =====
 clean:
-	rm -rf $(_BUILD_DIR) $(_BUILDED_IMAGE_CONFIG)
+	rm -rf $(_TMP_DIR) $(_BUILD_DIR) $(_BUILDED_IMAGE_CONFIG)
 
 
 __DOCKER_RUN_TMP = $(DOCKER) run \
