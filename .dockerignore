@@ -1,5 +1,5 @@
 /.git/
 /.mnt/
-/.tmp/
+/.cache/
 /.build/
-/.builded.conf
+/.built.conf
